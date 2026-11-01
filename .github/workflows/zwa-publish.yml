@@ -39,17 +39,31 @@ jobs:
             exit 1
           fi
 
+      # The commit ZWA_VERSION points to now, so an updated zwa is built again
+      # (a fixed key would keep the first build forever).
+      - name: Find the zwa version
+        id: zwa
+        run: |
+          rev=$(git ls-remote https://github.com/imo-tikuwa/zwa-cms "$ZWA_VERSION" | head -n 1 | cut -f 1)
+          if ! [[ "$rev" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::zwa version \"$ZWA_VERSION\" was not found in imo-tikuwa/zwa-cms."
+            exit 1
+          fi
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+
       - name: Cache zwa
         id: cache
         uses: actions/cache@v6
         with:
           path: ~/.cargo/bin/zwa
-          key: zwa-${{ runner.os }}-${{ env.ZWA_VERSION }}
+          key: zwa-${{ runner.os }}-${{ steps.zwa.outputs.rev }}
 
-      # Only the first time (and after changing ZWA_VERSION). Takes about 10 minutes.
+      # Only when zwa has changed. Takes about 10 minutes.
       - name: Install zwa
         if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo install --git https://github.com/imo-tikuwa/zwa-cms --branch "$ZWA_VERSION" --locked zwa-cli
+        env:
+          ZWA_REV: ${{ steps.zwa.outputs.rev }}
+        run: cargo install --git https://github.com/imo-tikuwa/zwa-cms --rev "$ZWA_REV" --locked zwa-cli
 
       - name: Publish
         run: zwa publish --site "$ZWA_SITE_ID"
